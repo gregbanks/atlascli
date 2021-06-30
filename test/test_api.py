@@ -1,4 +1,6 @@
 import json
+import os
+import sys
 import unittest
 import logging
 import pprint
@@ -9,16 +11,20 @@ from atlascli.errors import AtlasGetError
 from atlascli.config import Config
 from atlascli.atlaskey import AtlasKey
 
+TEST_ORG_ID_DEFAULT = "5d97bcac9ccf641309000a18"
+TEST_ORG_ID_ENV_KEY = "TEST_ORG_ID"
+TEST_ORG_NAME_DEFAULT = "Dummy Organisation"
+TEST_ORG_NAME_ENV_KEY = "TEST_ORG_NAME"
 
 class TestAPI(unittest.TestCase):
 
-    ORG_ID = "5d97bcac9ccf641309000a18"
-    ORG_NAME = "Dummy Organisation"
+    ORG_ID = os.getenv(TEST_ORG_ID_ENV_KEY, TEST_ORG_ID_DEFAULT)
+    ORG_NAME = os.getenv(TEST_ORG_NAME_ENV_KEY, TEST_ORG_NAME_DEFAULT)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._cfg = Config()
-        public_key, private_key = self._cfg.get_keys("Dummy Organisation")
+        public_key, private_key = self._cfg.get_keys(TestAPI.ORG_NAME)
         assert public_key is not None
         assert private_key is not None
 
@@ -65,7 +71,7 @@ class TestAPI(unittest.TestCase):
         cluster = self._api.create_cluster(project_id=project.id, name=cluster_name, config=cfg)
         self._api.delete_cluster(cluster)
         while True:
-            cluster_names = [x.name for x in self._api.get_clusters(project.id)]
+            cluster_names = [x.name for x in self._api.get_all_clusters(project.id)]
             if cluster_name not in cluster_names:
                 break
 

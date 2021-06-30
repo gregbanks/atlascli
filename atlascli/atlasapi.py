@@ -10,7 +10,9 @@ more clusters.
 
 Author:joe@joedrumgoole.com
 """
+import inspect
 import logging
+import os
 import pprint
 import random
 import string
@@ -24,26 +26,34 @@ from atlascli.atlascluster import AtlasCluster
 from atlascli.atlaskey import AtlasKey
 from atlascli.atlasorganization import AtlasOrganization
 from atlascli.atlasproject import AtlasProject
-from atlascli.errors import AtlasError, AtlasInitialisationError, AtlasGetError, AtlasPostError, AtlasPatchError, \
+from atlascli.errors import AtlasError, AtlasInitialisationError, AtlasGetError, \
+    AtlasPostError, AtlasPatchError, \
     AtlasDeleteError
+from atlascli.atlasinstance import AtlasInstance
+from atlascli.atlasserverless import AtlasServerless
 
+SERVERLESS_PATH_SEGMENT = "serverless"
+CLUSTER_PATH_SEGMENT = "clusters"
+
+SITE_URL_ENV_KEY = "ATLAS_URL"
+SITE_URL_DEFAULT = "https://cloud.mongodb.com"
 
 class AtlasAPI:
-
-    SITE_URL = "https://cloud.mongodb.com"
+    SITE_URL = os.getenv(SITE_URL_ENV_KEY, SITE_URL_DEFAULT)
     API_URL = f"/api/atlas/v1.0"
     ATLAS_BASE_URL = f"{SITE_URL}{API_URL}"
 
-    ATLAS_HEADERS = {"Accept"       : "application/json",
-                     "Content-Type" : "application/json"}
+    ATLAS_HEADERS = {"Accept": "application/json",
+                     "Content-Type": "application/json"}
 
     def __init__(self, page_size: int = 100):
         self._auth = None
         self._log = logging.getLogger(__name__)
         self._page_size = page_size
 
-        if self._page_size < 1 or self._page_size > 500 :
-            raise AtlasInitialisationError("'page_size' must be between 1 and 500")
+        if self._page_size < 1 or self._page_size > 500:
+            raise AtlasInitialisationError(
+                "'page_size' must be between 1 and 500")
 
     def authenticate(self, key: AtlasKey = None):
         if not key:
@@ -58,7 +68,8 @@ class AtlasAPI:
 
     @staticmethod
     def random_name(prefix="ATLASCLI"):
-        return prefix +''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
+        return prefix + ''.join(
+            random.choices(string.ascii_uppercase + string.digits, k=5))
 
     def post(self, resource, data):
         self._log.debug(f"post({resource}, {data})")
@@ -67,15 +78,15 @@ class AtlasAPI:
             raise AtlasError("You have not authenticated your Atlas API key")
 
         try:
-            #print(f"requests.post(url={resource}, data={data}, headers={self.ATLAS_HEADERS}, auth={self._auth})")
-            #print("printing data")
-            #pprint.pprint(data)
+            # print(f"requests.post(url={resource}, data={data}, headers={self.ATLAS_HEADERS}, auth={self._auth})")
+            # print("printing data")
+            # pprint.pprint(data)
             r = requests.post(url=resource,
                               json=data,
-                              #json=json.dumps(data),
+                              # json=json.dumps(data),
                               headers=self.ATLAS_HEADERS,
                               auth=self._auth)
-            #print(r.url)
+            # print(r.url)
             r.raise_for_status()
 
         except requests.exceptions.HTTPError as e:
@@ -87,18 +98,17 @@ class AtlasAPI:
         self._log.debug(f"get({resource})")
         # Need to use the raw URL when getting linked data
 
-
         if not self.is_authenticated():
             raise AtlasError("You have not authenticated your Atlas API key")
 
-        args =""
+        args = ""
         if "itemsPerPage" not in resource:
-            args=args+f"?itemsPerPage={items_per_page}"
+            args = args + f"?itemsPerPage={items_per_page}"
 
         if "pageNum" not in resource:
-            if len(args) > 0 :
+            if len(args) > 0:
                 args = args + "&"
-            args=args+f"pageNum={page_num}"
+            args = args + f"pageNum={page_num}"
 
         resource = resource + args
 
@@ -115,10 +125,11 @@ class AtlasAPI:
     def atlas_post(self, resource, data):
         return self.post(resource=f"{self.ATLAS_BASE_URL}{resource}", data=data)
 
-    def atlas_get(self,resource=None, page_num=1, items_per_page=100):
+    def atlas_get(self, resource=None, page_num=1, items_per_page=100):
         if resource is None:
             resource = ""
-        return self.get(f"{self.ATLAS_BASE_URL}{resource}", items_per_page=items_per_page, page_num=page_num)
+        return self.get(f"{self.ATLAS_BASE_URL}{resource}",
+                        items_per_page=items_per_page, page_num=page_num)
 
     def atlas_patch(self, resource, data):
         self._log.debug(f"atlas_patch({resource}, {data})")
@@ -148,7 +159,8 @@ class AtlasAPI:
         if not self.is_authenticated():
             raise AtlasError("You have not authenticated your Atlas API key")
         try:
-            d = requests.delete(f"{resource}", headers=self.ATLAS_HEADERS, auth=self._auth)
+            d = requests.delete(f"{resource}", headers=self.ATLAS_HEADERS,
+                                auth=self._auth)
             d.raise_for_status()
         except requests.exceptions.HTTPError as e:
             raise AtlasDeleteError(e, d.json()["detail"])
@@ -237,14 +249,14 @@ class AtlasAPI:
             return AtlasOrganization(org)
 
     @lru_cache(maxsize=500)
-    def get_one_cached_organization(self, org_id:str)->Dict:
+    def get_one_cached_organization(self, org_id: str) -> AtlasOrganization:
         return AtlasOrganization(self.get(f"/orgs/{org_id}"))
 
-    def get_one_organization(self, org_id:str)->dict:
+    def get_one_organization(self, org_id: str) -> AtlasOrganization:
         return AtlasOrganization(self.atlas_get(f"/orgs/{org_id}"))
 
-    def create_organization(self, name:str)->dict:
-        return AtlasOrganization(self.atlas_post(f"/orgs", { "name" : name}))
+    def create_organization(self, name: str) -> AtlasOrganization:
+        return AtlasOrganization(self.atlas_post(f"/orgs", {"name": name}))
 
     def delete_organization(self, name):
         return self.delete(f"/orgs/{name}")
@@ -262,7 +274,9 @@ class AtlasAPI:
         :param project_name:
         :return: project doc
         """
-        return AtlasProject(self.atlas_post(resource=f"/groups", data={"name": project_name, "orgId": org_id}))
+        return AtlasProject(self.atlas_post(resource=f"/groups",
+                                            data={"name": project_name,
+                                                  "orgId": org_id}))
 
     def delete_project(self, project_id) -> Dict:
         """
@@ -278,7 +292,7 @@ class AtlasAPI:
         for project in self.get_resource_by_item(f"/groups"):
             yield AtlasProject(project)
 
-    def get_one_project(self, project_id)-> AtlasProject:
+    def get_one_project(self, project_id) -> AtlasProject:
         """
         https://docs.atlas.mongodb.com/reference/api/project-get-one/
         GET /api/atlas/v1.0/groups/{GROUP-ID}
@@ -297,23 +311,146 @@ class AtlasAPI:
             yield project["id"]
 
     #
+    # Instance Methods
+    #
+
+    @staticmethod
+    def instance_collection_url(path_segment: str, project_id: str) -> str:
+        return f"/groups/{project_id}/{path_segment}"
+
+    @staticmethod
+    def instance_url(path_segment: str, project_id: str, name: str) -> str:
+        return f"{AtlasAPI.instance_collection_url(path_segment, project_id)}" \
+               f"/{name}"
+
+    def create_instance(self, path_segment: str, project_id: str, name: str,
+                        config: Dict) -> Dict:
+        config["name"] = name
+        return self.atlas_post(
+            AtlasAPI.instance_collection_url(path_segment, project_id),
+            config)
+
+    def get_all_instances(self, path_segment: str, project_id: str) -> \
+        Generator[Dict, None, None]:
+        for instance in self.get_resource_by_item(
+            AtlasAPI.instance_collection_url(
+                path_segment, project_id)):
+            yield instance
+
+    def delete_instance(self, path_segment: str, i: AtlasInstance) -> Dict:
+        return self.atlas_delete(
+            AtlasAPI.instance_url(path_segment, i.project_id, i.name))
+
+    def modify_instance(self, path_segment: str, i: AtlasInstance,
+                        modifications: Dict) -> Dict:
+        return self.atlas_patch(
+            AtlasAPI.instance_url(path_segment, i.project_id, i.name),
+            data=modifications)
+
+    def get_one_instance(self, path_segment: str, project_id: str,
+                         serverless_name: str) -> Dict:
+        return self.atlas_get(
+            AtlasAPI.instance_url(path_segment, project_id, serverless_name))
+
+    def pause_instance(self, path_segment: str, i: AtlasInstance) -> Dict:
+        pause_doc = {"paused": True}
+        return self.atlas_patch(
+            AtlasAPI.instance_url(path_segment, i.project_id, i.name),
+            pause_doc)
+
+    def resume_instance(self, path_segment: str, i: AtlasInstance) -> Dict:
+        pause_doc = {"paused": False}
+        return self.atlas_patch(
+            AtlasAPI.instance_url(path_segment, i.project_id, i.name),
+            pause_doc)
+
+    #
+    # Serverless Methods
+    #
+
+    @staticmethod
+    def serverless_collection_url(project_id) -> str:
+        return AtlasAPI.instance_collection_url(SERVERLESS_PATH_SEGMENT,
+                                                project_id)
+
+    @staticmethod
+    def serverless_url(project_id, serverless_name) -> str:
+        return AtlasAPI.instance_url(SERVERLESS_PATH_SEGMENT, project_id,
+                                     serverless_name)
+
+    def create_serverless(self, project_id: str, name: str,
+                          config: Dict) -> AtlasServerless:
+        return AtlasServerless(project_id=project_id,
+                               name=name,
+                               serverless_config=self.create_instance(
+                                   SERVERLESS_PATH_SEGMENT, project_id, name,
+                                   config))
+
+    def get_all_serverless(self, project_id) -> Generator[
+        AtlasServerless, None, None]:
+        for serverless in self.get_all_instances(SERVERLESS_PATH_SEGMENT,
+                                                 project_id):
+            yield AtlasServerless(project_id, serverless["name"], serverless)
+
+    def delete_serverless(self, s: AtlasServerless) -> Dict:
+        """
+        DELETE /api/atlas/v1.0/groups/{GROUP-ID}/serverless/{SERVERLESS-NAME}
+        """
+        return self.delete_instance(
+            SERVERLESS_PATH_SEGMENT, s)
+
+    def modify_serverless(self, s: AtlasServerless,
+                          modifications: Dict) -> AtlasServerless:
+        """
+        PATCH /groups/{GROUP-ID}/serverless/{SERVERLESS-NAME}
+        :param s:
+        :param modifications:  A dict defining the fields to be changed
+        :return: a Change doc reflecting the updated serverless
+        """
+        return AtlasServerless(s.project_id, s.name,
+                               self.modify_instance(SERVERLESS_PATH_SEGMENT, s,
+                                                    modifications))
+
+    @lru_cache(maxsize=500)
+    def get_one_cached_serverless(self, project_id: str, serverless_name: str):
+        return self.get_one_serverless(project_id, serverless_name)
+
+    def get_one_serverless(self, project_id: str,
+                        serverless_name: str) -> AtlasServerless:
+        result = self.get_one_instance(SERVERLESS_PATH_SEGMENT, project_id,
+                                       serverless_name)
+        return AtlasServerless(project_id, result["name"], result)
+
+    def pause_serverless(self, s: AtlasServerless) -> AtlasServerless:
+        raise NotImplementedError(inspect.currentframe().f_code.co_name)
+
+    def resume_serverless(self, c: AtlasServerless) -> AtlasServerless:
+        raise NotImplementedError(inspect.currentframe().f_code.co_name)
+
+    #
     # Cluster Methods
     #
 
     @staticmethod
-    def cluster_url(project_id, cluster_name):
-        return f"/groups/{project_id}/clusters/{cluster_name}"
+    def cluster_collection_url(project_id) -> str:
+        return AtlasAPI.instance_collection_url(CLUSTER_PATH_SEGMENT,
+                                                project_id)
 
-    def create_cluster(self, project_id: str, name: str, config: Dict) -> AtlasCluster:
+    @staticmethod
+    def cluster_url(project_id, cluster_name) -> str:
+        return AtlasAPI.instance_url(CLUSTER_PATH_SEGMENT, project_id,
+                                     cluster_name)
 
-        config["name"] = name
-        created_cluster = self.atlas_post(f"/groups/{project_id}/clusters", config)
+    def create_cluster(self, project_id: str, name: str,
+                       config: Dict) -> AtlasCluster:
         return AtlasCluster(project_id=project_id,
                             name=name,
-                            cluster_config=created_cluster)
+                            cluster_config=self.create_instance(
+                                CLUSTER_PATH_SEGMENT, project_id, name, config))
 
-    def get_clusters(self, project_id) -> Generator[str, None, None]:
-        for cluster in self.get_resource_by_item(f"/groups/{project_id}/clusters"):
+    def get_all_clusters(self, project_id) -> Generator[
+        AtlasCluster, None, None]:
+        for cluster in self.get_all_instances(CLUSTER_PATH_SEGMENT, project_id):
             yield AtlasCluster(project_id, cluster["name"], cluster)
 
     def delete_cluster(self, c: AtlasCluster) -> Dict:
@@ -321,9 +458,11 @@ class AtlasAPI:
         DELETE /api/atlas/v1.0/groups/{GROUP-ID}/clusters/{CLUSTER-NAME}
         https://docs.atlas.mongodb.com/reference/api/clusters-delete-one/
         """
-        return self.atlas_delete(f"/groups/{c.project_id}/clusters/{c.name}")
+        return self.delete_instance(
+            CLUSTER_PATH_SEGMENT, c)
 
-    def modify_cluster(self, c: AtlasCluster, modifications: Dict) -> AtlasCluster:
+    def modify_cluster(self, c: AtlasCluster,
+                       modifications: Dict) -> AtlasCluster:
         """
         PATCH /groups/{GROUP-ID}/clusters/{CLUSTER-NAME}
         https://docs.atlas.mongodb.com/reference/api/clusters-modify-one/
@@ -331,32 +470,27 @@ class AtlasAPI:
         :param modifications:  A dict defining the fields to be changed
         :return: a Change doc reflecting the updated cluster
         """
-
-        result = self.atlas_patch(f"/groups/{c.project_id}/clusters/{c.name}", data=modifications)
-        return AtlasCluster(c.project_id, c.name, result)
+        return AtlasCluster(c.project_id, c.name,
+                            self.modify_instance(CLUSTER_PATH_SEGMENT, c,
+                                                 modifications))
 
     @lru_cache(maxsize=500)
     def get_one_cached_cluster(self, project_id: str, cluster_name: str):
         return self.get_one_cluster(project_id, cluster_name)
 
-    def get_one_cluster(self, project_id: str, cluster_name: str) -> AtlasCluster:
-        result = self.atlas_get(self.cluster_url(project_id, cluster_name))
+    def get_one_cluster(self, project_id: str,
+                        cluster_name: str) -> AtlasCluster:
+        result = self.get_one_instance(CLUSTER_PATH_SEGMENT, project_id,
+                                       cluster_name)
         return AtlasCluster(project_id, result["name"], result)
 
     def pause_cluster(self, c: AtlasCluster) -> AtlasCluster:
-        pause_doc = {"paused": True}
-        result = self.atlas_patch(f"/groups/{c.project_id}/clusters/{c.name}", pause_doc)
+        result = self.pause_instance(CLUSTER_PATH_SEGMENT, c)
         return AtlasCluster(c.project_id, c.name, result)
 
     def resume_cluster(self, c: AtlasCluster) -> AtlasCluster:
-        pause_doc = {"paused": False}
-        result = self.atlas_patch(f"/groups/{c.project_id}/clusters/{c.name}", pause_doc)
+        result = self.resume_instance(CLUSTER_PATH_SEGMENT, c)
         return AtlasCluster(c.project_id, c.name, result)
 
     def __repr__(self):
         return f"AtlasAPI(page_size={self._page_size})"
-
-
-
-
-

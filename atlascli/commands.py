@@ -99,7 +99,7 @@ class Commands:
     @staticmethod
     def template_cluster_cmd(cfg_file, output_file=None):
         cfg = json.load(cfg_file)
-        new_cfg = AtlasCluster.strip_cluster_dict(cfg)
+        new_cfg = AtlasCluster.strip_instance_dict(cfg)
         if output_file:
             output_file.write(json.dumps(new_cfg))
             print(f"Template config created in '{Fore.MAGENTA}{output_file.name}{Fore.RESET}'")
@@ -109,7 +109,7 @@ class Commands:
     def clone_cluster_cmd(self, cluster_name: str, output_file=None):
         cluster_id = self.preflight_cluster_arg(cluster_name)
         cluster = self._map.get_one_cluster(cluster_id.project_id, cluster_id.name)
-        new_cfg = AtlasCluster.strip_cluster_dict(cluster.resource)
+        new_cfg = AtlasCluster.strip_instance_dict(cluster.resource)
         if output_file:
             output_file.write(json.dumps(new_cfg))
             print(f"Cloned cluster {cluster.pretty_id_name()} into {Fore.LIGHTWHITE_EX}{output_file.name}")

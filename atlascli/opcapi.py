@@ -63,7 +63,7 @@ class OPCAPI:
 
     def get_clusters(self, project_id) -> List[AtlasCluster]:
         result=[]
-        clusters = self._atlas_api.get_clusters(project_id)
+        clusters = self._atlas_api.get_all_clusters(project_id)
         for cluster in clusters:
             result.append(AtlasCluster())
         return result

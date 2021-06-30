@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import string
+from typing import Optional
 
 from colorama import init, Fore
 
@@ -17,24 +18,27 @@ class ProjectID:
         return self._id
 
     @staticmethod
-    def validate_project_id(p: str, throw_exception: bool = True) -> str:
+    def validate_project_id(p: str, throw_exception: bool = True) -> Optional[str]:
         if p is None:
             raise ValueError("project_id cannot be None")
         if len(p) < 24:
             if throw_exception:
-                raise ValueError(f"Not a valid project ID, project ID cannot be less than 24 chars: '{p}'")
+                raise ValueError(
+                    f"Not a valid project ID, project ID cannot be less than 24 chars: '{p}'")
             else:
                 return None
         elif len(p) > 24:
             if throw_exception:
-                raise ValueError(f"Not a valid project ID, project ID cannot be more than 24 chars: '{p}'")
+                raise ValueError(
+                    f"Not a valid project ID, project ID cannot be more than 24 chars: '{p}'")
             else:
                 return None
 
         for c in p:
             if c not in string.hexdigits:
                 if throw_exception:
-                    raise ValueError(f"Not a valid project ID, string is not hexadecimal: '{p}'")
+                    raise ValueError(
+                        f"Not a valid project ID, string is not hexadecimal: '{p}'")
                 else:
                     return None
         return p
@@ -55,15 +59,22 @@ class ProjectID:
         return f"{self.id}"
 
 
-class ClusterID:
+class InstanceID:
+    INSTANCE_NAME_CHARS = string.ascii_letters + string.digits + '-'
 
-    CLUSTER_NAME_CHARS = string.ascii_letters + string.digits + '-'
-    # Valid characters in an Atlas cluster name
+    # Valid characters in an Atlas instance name
 
-    def __init__(self, project_id: str, cluster_name: str, throw_exception: bool = True):
+    def __init__(self, project_id: str, instance_name: str,
+                 throw_exception: bool = True):
 
-        self._project_id = ProjectID.validate_project_id(project_id, throw_exception)
-        self._name = ClusterID.validate_cluster_name(cluster_name, throw_exception)
+        self._project_id = ProjectID.validate_project_id(project_id,
+                                                         throw_exception)
+        self._name = self.__class__.validate_instance_name(instance_name,
+                                                       throw_exception)
+
+    @classmethod
+    def get_instance_type(cls) -> str:
+        raise NotImplementedError()
 
     @property
     def project_id(self):
@@ -73,52 +84,56 @@ class ClusterID:
     def name(self):
         return self._name
 
-    @staticmethod
-    def validate_cluster_name(cluster_name: str, throw_exception=True) -> str:
-        for c in cluster_name:
-            if c not in ClusterID.CLUSTER_NAME_CHARS:
+    @classmethod
+    def validate_instance_name(cls, instance_name: str,
+                               throw_exception=True) -> str:
+        for c in instance_name:
+            if c not in InstanceID.INSTANCE_NAME_CHARS:
                 if throw_exception:
-                    print(f"{Fore.RED}{cluster_name}{Fore.RESET} is not a valid cluster "
-                          f"(ASCII letters, numbers and '-' only")
-                    raise ValueError("{cluster_name} is not a valid cluster (ASCII letters, numbers and '-' only")
+                    print(
+                        f"{Fore.RED}{instance_name}{Fore.RESET} is not a valid {cls.get_instance_type()} "
+                        f"(ASCII letters, numbers and '-' only")
+                    raise ValueError(
+                        f"{instance_name} is not a valid {cls.get_instance_type()} (ASCII letters, numbers and '-' only")
                 else:
                     return None
-        return cluster_name
+        return instance_name
 
-    @staticmethod
-    def parse(s: str) -> ClusterID:
-        project_id, separator, cluster_name = s.partition(":")
+    @classmethod
+    def parse(cls, s: str) -> InstanceID:
+        project_id, separator, instance_name = s.partition(":")
 
-        return ClusterID(ProjectID.validate_project_id(project_id),
-                         ClusterID.validate_cluster_name(cluster_name))
+        return cls(ProjectID.validate_project_id(project_id),
+                   cls.validate_instance_name(instance_name))
 
-    @staticmethod
-    def parse_id_name(cluster_name: str) -> (str, str):
-        id, sep, name = cluster_name.partition(":")
+    @classmethod
+    def parse_id_name(cls, instance_name: str) -> (str, str):
+        id, sep, name = instance_name.partition(":")
         if len(sep) == 0:
             return None, id
         elif len(id) == 0:
             return None, name
         else:
             return id, name
+        # raise ValueError(f"{instance_name} cannot be parsed as a {cls.get_instance_typ()} name of the form 'id:name'")
 
-        raise ValueError(f"{cluster_name} cannot be parsed as a cluster name of the form 'id:name'")
-
-    @staticmethod
-    def canonical_name(cluster_name: str) -> str:
+    @classmethod
+    def canonical_name(cls, instance_name: str) -> str:
         #
-        # check that the cluster name is of the form
-        # <project_id>:<cluster-name> Used by argparse. The name
+        # check that the instance name is of the form
+        # <project_id>:<instance-name> Used by argparse. The name
         # is tuned to fit the error message
         #
-        project_id, sep, name = cluster_name.partition(":")
+        project_id, sep, name = instance_name.partition(":")
         if len(sep) == 0:
-            print(f"{cluster_name} must have a project ID and a cluster name seperated by a ':'")
+            print(
+                f"{instance_name} must have a project ID and a {cls.get_instance_type()} name seperated by a ':'")
             raise ValueError
 
         try:
-            project_id = ProjectID.validate_project_id(project_id, throw_exception=True)
-            name = ClusterID.validate_cluster_name(name, throw_exception=True)
+            project_id = ProjectID.validate_project_id(project_id,
+                                                       throw_exception=True)
+            name = cls.validate_instance_name(name, throw_exception=True)
         except ValueError as e:
             print(e)
             raise
@@ -132,7 +147,29 @@ class ClusterID:
         return f"{self.project_id}:{self._name}"
 
     def __repr__(self):
-        return f"{__name__}(project_id={self._project_id}, cluster_name={self._name})"
+        return f"{__name__}(project_id={self._project_id}, {self.__class__.get_instance_type()}_name={self._name})"
 
     def pretty(self):
         return f"{Fore.YELLOW}{self.project_id}:{Fore.GREEN}{self.name}{Fore.RESET}"
+
+
+class ServerlessID(InstanceID):
+
+    def __init__(self, project_id: str, cluster_name: str,
+                 throw_exception: bool = True):
+        super().__init__(project_id, cluster_name, throw_exception)
+
+    @classmethod
+    def get_instance_type(cls) -> str:
+        return "serverless"
+
+
+class ClusterID(InstanceID):
+
+    def __init__(self, project_id: str, cluster_name: str,
+                 throw_exception: bool = True):
+        super().__init__(project_id, cluster_name, throw_exception)
+
+    @classmethod
+    def get_instance_type(cls) -> str:
+        return "cluster"
