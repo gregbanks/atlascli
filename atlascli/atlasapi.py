@@ -38,12 +38,13 @@ CLUSTER_PATH_SEGMENT = "clusters"
 SITE_URL_ENV_KEY = "ATLAS_URL"
 SITE_URL_DEFAULT = "https://cloud.mongodb.com"
 
+
 class AtlasAPI:
     SITE_URL = os.getenv(SITE_URL_ENV_KEY, SITE_URL_DEFAULT)
     API_URL = f"/api/atlas/v1.0"
     ATLAS_BASE_URL = f"{SITE_URL}{API_URL}"
 
-    ATLAS_HEADERS = {"Accept": "application/json",
+    ATLAS_HEADERS = {"Accept":       "application/json",
                      "Content-Type": "application/json"}
 
     def __init__(self, page_size: int = 100):
@@ -275,7 +276,7 @@ class AtlasAPI:
         :return: project doc
         """
         return AtlasProject(self.atlas_post(resource=f"/groups",
-                                            data={"name": project_name,
+                                            data={"name":  project_name,
                                                   "orgId": org_id}))
 
     def delete_project(self, project_id) -> Dict:
@@ -288,7 +289,7 @@ class AtlasAPI:
         """
         return self.atlas_delete(f"/groups/{project_id}")
 
-    def get_projects(self) -> Generator[dict, None, None]:
+    def get_projects(self) -> Generator[AtlasProject, None, None]:
         for project in self.get_resource_by_item(f"/groups"):
             yield AtlasProject(project)
 
@@ -309,6 +310,30 @@ class AtlasAPI:
     def get_project_ids(self) -> Generator[str, None, None]:
         for project in self.get_resource_by_item(f"/groups"):
             yield project["id"]
+
+    def add_cidr_to_project_access_list(self, project_id: str, cidr: str,
+                                        comment: str = "atlascli") -> Dict:
+        return self.atlas_post(resource=f"/groups/{project_id}/accessList",
+                               data=[{"cidrBlock": cidr}])
+
+    def get_project_access_list(self, project_id: str) -> Dict:
+        return self.atlas_get(resource=f"/groups/{project_id}/accessList")
+
+    def add_database_user(self, project_id: str, username: str, password: str,
+                          role_name: str = "readWriteAnyDatabase",
+                          auth_db: str = "admin") -> Dict:
+        return self.atlas_post(resource=f"/groups/{project_id}/databaseUsers",
+                               data={
+                                   "databaseName": auth_db,
+                                   "groupId":      project_id,
+                                   "roles": [{"roleName": role_name, "databaseName": auth_db}],
+                                   "username": username,
+                                   "password": password
+                               })
+
+    def get_database_user(self, project_id: str, username: str, auth_db: str = "admin") -> Dict:
+        return self.atlas_get(resource=f"/groups/{project_id}/databaseUsers/{auth_db}/{username}")
+
 
     #
     # Instance Methods
@@ -380,6 +405,7 @@ class AtlasAPI:
 
     def create_serverless(self, project_id: str, name: str,
                           config: Dict) -> AtlasServerless:
+        config["providerSettings"]["providerName"] = "SERVERLESS"
         return AtlasServerless(project_id=project_id,
                                name=name,
                                serverless_config=self.create_instance(
@@ -399,6 +425,12 @@ class AtlasAPI:
         return self.delete_instance(
             SERVERLESS_PATH_SEGMENT, s)
 
+    def delete_serverless_by_id(self, project_id: str,
+                                serverless_name: str) -> Dict:
+        return self.atlas_delete(
+            AtlasAPI.instance_url(SERVERLESS_PATH_SEGMENT, project_id,
+                                  serverless_name))
+
     def modify_serverless(self, s: AtlasServerless,
                           modifications: Dict) -> AtlasServerless:
         """
@@ -411,12 +443,19 @@ class AtlasAPI:
                                self.modify_instance(SERVERLESS_PATH_SEGMENT, s,
                                                     modifications))
 
+    def modify_serverless_by_id(self, project_id: str, serverless_name: str,
+                                modifications: Dict) -> AtlasServerless:
+        return AtlasServerless(project_id, serverless_name, self.atlas_patch(
+            AtlasAPI.instance_url(SERVERLESS_PATH_SEGMENT, project_id,
+                                  serverless_name),
+            data=modifications))
+
     @lru_cache(maxsize=500)
     def get_one_cached_serverless(self, project_id: str, serverless_name: str):
         return self.get_one_serverless(project_id, serverless_name)
 
     def get_one_serverless(self, project_id: str,
-                        serverless_name: str) -> AtlasServerless:
+                           serverless_name: str) -> AtlasServerless:
         result = self.get_one_instance(SERVERLESS_PATH_SEGMENT, project_id,
                                        serverless_name)
         return AtlasServerless(project_id, result["name"], result)
